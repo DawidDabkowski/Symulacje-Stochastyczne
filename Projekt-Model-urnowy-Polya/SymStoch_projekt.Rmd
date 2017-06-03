@@ -1,0 +1,236 @@
+---
+title: "Model urnowy Polya"
+subtitle: "Symulacje Stochastyczne projekt nr 8"
+author: "Dominik Ambroziak, Dawid Dąbkowski"
+date: "9 kwietnia 2017"
+output: html_document
+---
+
+## Treść polecenia
+**Model urnowy Polya.** Dany jest wektor $(\alpha_1,\ldots,\alpha_k)$. Niech $a=\sum_j \alpha_j$. Ciąg zmiennych losowych $X_1,\ldots,X_i,...$ jest zdefiniowany rekurencyjnie:
+$$\mathbb{P}(X_1=j)=\frac{\alpha_j}{a}, \quad \mathbb{P}(X_n=j|X_1,\ldots,X_{n-1})=\frac{\alpha_j+N_j(n-1)}{a+n-1}, $$
+gdzie $N_j(n-1)=\sum_{i=1}^{n-1}\mathbb{I}(X_i=j)$. Sprawdzić doświadczalnie zbierzność wektorów losowych $(N_i(n),\ldots,N_k(n))/n$ według prawdopodobieństwa, przy $n \rightarrow \infty$. Zidentyfikować rozkład graniczny.
+
+## Opis problemu
+Doświadczenie polega na losowaniu kolejnych wartości zmiennej X, które to wartości przyjmowane są z prawdopodobieństwem tym większym, im więcej razy dana wartość została już wylosowana. Dane są również początkowe prawdopodobieństwa. Wynikiem jest wektor częstości występowania danej wartości.
+
+O doświadczeniu można myśleć jako o losowaniu ze zwracaniem kolorowych kul z urny, przy czym po wylosowaniu kuli i włożeniu jej z powrotem, dorzucamy do urny jedną kulę o takim samym kolorze. Wektor alpha to wektor początkowych ilości kul (może mieć składowe niecałkowite, wówczas porównanie z losowaniem kul może nie być do końca dobre).
+
+W punkcie 1 pokażemy, jak wygląda przebieg takiego doświadczenia. W punkcie 2 powtórzymy doświadczenie wielokrotnie i przedstawimy brzegowy rozkład graniczny wektora częstości.
+
+Wektor alpha oznaczany jest przez "alpha", natomiast sumę składowych wektora alpha oznaczamy przez "a".
+
+Użyte biblioteki i skrypty:
+
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+library(ggplot2)  # ggplot
+library(dplyr)    # operator %>%
+library(reshape)  # funkcja melt
+source("multiplot.R")
+```
+
+## 1. Symulacja
+
+We wszystkich symulacjach będziemy używać tych samych ograniczeń na ilość kroków:
+
+```{r}
+n <- 1000 # długość jednej symulacji
+m <- 5000 # liczba symulacji
+```
+
+Funkcja licząca prawdopodobieństwa w kolejnych krokach.
+
+```{r}
+set_probs <- function(alpha, counts, a, n){  # counts i alpha sa wektorami
+  (alpha + counts)/(a + n - 1)               # counts zawiera liczby wystepowan dla kazdej wartosci zmiennej X
+}
+```
+
+Funkcja przeprowadzająca symulację i zwracająca jej przebieg.
+
+```{r}
+simulation <- function(alpha, n){ # n to dlugosc symulacji
+  a <- sum(alpha)
+  k <- length(alpha)      # liczba mozliwych wartosci przyjmowanych przez X (liczba kolorow kul w urnie)
+  N <- matrix(0, k, n+1)  # N[,i] odpowiada wartosciom N w momencie i-1
+  for(i in 1:n){
+    probs <- set_probs(alpha, N[,i], a, i)
+    indeks <- sample(k, 1, replace = TRUE, prob = probs)
+    N[,i+1] <- N[,i]
+    N[indeks, i+1] <- N[indeks, i+1] + 1
+  }
+  N 
+}
+```
+
+Funkcja do wizualizacji wyników.
+
+```{r}
+plots <- function(alpha, n){
+  plot_list <- list()
+  df <- simulation(alpha, n) %>% t() %>% as.data.frame()
+  df$id <- 1:(n+1)
+  df.long <- melt(df, id.vars = "id")
+  plot_list[[1]] <- ggplot(df.long, aes(id, value, color=variable)) + geom_line(size=1)
+  plot_list[[2]] <- ggplot(df.long, aes(id, value/id, color=variable)) + geom_line(size=1) + theme(legend.position="none")
+  plot_list
+}
+```
+
+Poniżej przedstawimy wykresy dla kilku niezależnych symulacji. Na osi poziomej przedstawione są numery kolejnych kroków symulacji. Na osi pionowej, na górnych wykresach zaznaczono ilości występowań poszczegolnych kolorów, a na dolnych wykresach stosunek tych ilości do wszystkich wylosowanych.
+
+#### Wykres 1. alpha=(1,1,1,1)
+```{r}
+multiplot(plotlist = plots(c(1,1,1,1), n), layout = matrix(c(1,2)))
+```
+
+#### Wykres 2. alpha=(1,1,2,4)
+```{r}
+multiplot(plotlist = plots(c(1,1,4,8), n), layout = matrix(c(1,2)))
+```
+
+#### Wykres 3. alpha=(0.1,0.1,0.1,0.1)
+```{r}
+multiplot(plotlist = plots(c(0.1,0.1,0.1,0.1), n), layout = matrix(c(1,2)))
+```
+
+#### Wykres 4. alpha=(50,50,50,50)
+```{r}
+multiplot(plotlist = plots(c(50,50,50,50), n), layout = matrix(c(1,2)))
+```
+
+Wykres 1 pokazuje, że pomimo równej ilości początkowych kul, równowaga ta szybko się psuje i niektóre kolory zaczynają dominować. Przy tym, jeśli wybranych kul jest na początku odpowiednio więcej, to kolory te dominują bardziej (wykres 2). Widzimy jednak ciekawą zależność ze względu na łączną ilość początkowych kul: jeśli jest ich bardzo mało to pierwsze losowania decydują o tym, który kolor będzie dominował i widzimy duże dysproporcje (wykres 3), pomimo tego że wektor alpha ma równe współrzędne. Z drugiej strony przy dość wysokim stanie początkowym, wylosowanie kuli nie wpłynie bardzo znacząco na prawdopodobieństwa i nie zauważymy tak dużych różnic (wykres 4).
+
+Jak widać na wykresach względna ilość kul poszczególnych kolorów stabilizuje się po dużej ilości prób. Istotnie, dla bardzo długiego wektora częstości, prawdopodobieństwa zmieniają się bardzo nieznacznie w kolejnych krokach. W następnym kroku pokażemy, jaki jest rozkład asymptotyczny ilości kul poszczególnych kolorów w doświadczeniu.
+
+## 2. Asymptotyka
+
+###Rozkłady brzegowe
+
+Odtąd będziemy badać zbieżnośc rozkładu częstości występowania kolorów. Na podstawie wcześniejszej obserwacji o stabilizowaniu się wektora unormowanych częstości, będziemy obserwować tylko ostatnią kolumnę macierzy N. W kolumnie tej przechowywana jest informacja o rozkładzie wylosowanych kul w ostatnim kroku doświadcznia. Będziemy potrzebować za to wielu niezależnych prób, zatem zapiszemy naszą symulację w bardziej oszczędnej wersji.
+
+```{r}
+simulation_efficient <- function(alpha, n, m){ # n to długosc kazdej symulacji, m to liczba symulacji
+  a <- sum(alpha)
+  k <- length(alpha)    # liczba mozliwych wartosci przyjmowanych przez X
+  M <- matrix(0, k, m)  # macierz ostatnich symulacji z wszystkich powtorzen lacznie
+  for (j in 1:m){
+    N <- vector("integer", k) # wektor wartosci symulacji w danym powtorzeniu
+    for(i in 1:n){
+      probs <- set_probs(alpha, N, a, i)
+      indeks <- sample(k, 1, replace = TRUE, prob = probs)
+      N[indeks] <- N[indeks] + 1
+    }  
+    M[,j] <- N
+  }
+  M
+}
+```
+
+Stwórzmy funkcję do rysowania histogramów rozkładów brzegowych ilości kul dla symulacji z danymi parametrami.
+
+```{r}
+distribution_plots <- function(alpha, n, m){
+  a <- sum(alpha)
+  k <- length(alpha)  # liczba mozliwych wartosci przyjmowanych przez X
+  
+  gg_color_hue <- function(n) { #funkcja pomocnicza, generuje domyslne kolory z ggplota
+    hues = seq(15, 375, length = n + 1)
+    hcl(h = hues, l = 65, c = 100)[1:n]
+  }
+  colors = gg_color_hue(k)
+  
+  plot_list <- list()
+  for (i in 1:k){
+    id <- 1:m
+    value <- simulation_efficient(alpha, n, m)[i,]
+    df <- data.frame(id, value)
+    ai <- alpha[i]
+    plot_list[[i]] <- ggplot(df, aes(value/n)) + geom_histogram(aes(y=..density..), fill=colors[i], bins = 30, size=1) + theme(legend.position="none") + stat_function(fun=dbeta, args=list(shape1=ai, shape2=a-ai), lwd=1) # histogram razem z gestoscia rozkladu beta
+  }
+  plot_list  
+}
+```
+
+Narysujmy histogramy dla częstości poszczególnych kolorów kul dla symulacji z wybranymi parametrami. Każdy histogram odpowiada innemu kolorowi kul.
+
+```{r}
+multiplot(plotlist = distribution_plots(c(1,1,4,8), n, m), layout = matrix(c(1,2,3,4), ncol=2, byrow=T))
+```
+
+Krzywe, które są wrysowane w histogramy, pochodzą z rozkładu beta. Dla i-tego koloru parametry to alpha[i] oraz a-alpha[i]. Na powyższym przykładzie dla wektora alpha=c(1,1,4,8) mamy rozkłady: beta(1, 13), beta(1, 13), beta(2, 12) oraz beta(6, 8). Rozpatrzmy jeszcze jeden przykład dla wektora alpha=c(0.1, 0.2, 1, 2)
+
+```{r}
+multiplot(plotlist = distribution_plots(c(0.1, 0.2, 1, 2), n, m), layout = matrix(c(1,2,3,4), ncol=2, byrow=T))
+```
+
+Wykresy sugerują, że brzegowy rozkład asymptotyczny to faktycznie funkcja beta z podanymi wcześniej parametrami, co z kolei sugeruje, że rozkład łączny jest k-wymiarowym rozkładem Dirichleta. 
+
+### Rozkład łączny
+
+To, że rokład łączny jest rozkładem Dirichleta można pokazać korzystając z Wniosku 5.4 z wykładu https://www.mimuw.edu.pl/~wniem/Sym_Stoch/wyklad.pdf który mówi, że aby wektor $(X_1,X_2,...,X_k)$ miał rozkład $Dir(\alpha_1, \alpha_2, ..., \alpha_k)$ wystarcza, by zmienne $Y_1, Y_2, ..., Y_{k-1}$ zdefiniowane $Y_i = \frac{X_1+...+X_i}{X_1+...+X_{i+1}}$ były względem siebie niezależne i każda z nich miała rozkład beta: $Y_i$~$Beta(\alpha_1+\alpha_2+...+\alpha_i, \alpha_{i+1})$.
+
+Rozkład wektorów $Y_i$ pokażemy doświadczalnie. Wprowadźmy funkcję liczącą wektory $Y_i$:
+
+```{r}
+simulation_sums <- function(alpha, n, m){
+  k <- length(alpha)  # liczba mozliwych wartosci przyjmowanych przez X  
+  X <- simulation_efficient(alpha, n, m)
+  
+  # Y_1, Y_2, ..., Y_(k-1)
+  S <- matrix( 0, k, m)
+  S[1, ] <- X[1, ]
+  for( i in 2:k){
+    S[i, ] <- S[i-1,] + X[i, ]
+  }
+  
+  Y <- matrix( 0, k-1, m)
+  for( i in 1:k-1){
+    Y[i,] <- ifelse(S[i+1,]>0,S[i,]/S[i+1,],1/2)
+  }
+  Y
+}
+```
+
+Definiujemy funkcję, rysującą histogramy zmiennych $Y_i$ i teoretyczne gęstości beta z odpowiednimi parametrami. Dodatkowo wykonujemy test Kołmogorowa-Smirnova na hipotezę zerową o równości tych rozkładów.
+
+```{r}
+sum_plots_tests <- function(alpha, n, m){
+  a <- sum(alpha)
+  k <- length(alpha)  # liczba mozliwych wartosci przyjmowanych przez X
+  
+  plot_list <- list()
+  test_list <- list()
+  Y <- simulation_sums(alpha, n, m)
+  for (i in 1:(k-1)){
+    id <- 1:m
+    value <- Y[i,]
+    df <- data.frame(id, value)
+    ai <- sum(alpha[1:i])
+    bi <- alpha[i+1]
+    plot_list[[i]] <- ggplot(df, aes(value)) + geom_histogram(aes(y=..density..), bins = 30, size=1) + theme(legend.position="none") + ggtitle(paste("Y", i)) + stat_function(fun=dbeta, args=list(shape1=ai, shape2=bi), color="red", lwd=1) # histogram razem z gestoscia rozkladu beta
+    test_list[[i]] <- ks.test(value, rbeta(m, ai, bi))
+  }
+  list(plot_list, test_list, Y)
+}
+```
+
+Wykonajmy wykresy i testy dla wektora $\alpha = (1,1,4,8)$.
+
+```{r, warning=FALSE}
+plots_tests <- sum_plots_tests(c(1,1,4,8), n, m)
+multiplot(plots_tests[[1]], layout = matrix(c(1,2,3,4), ncol=2, byrow=T))
+plots_tests[[2]]
+```
+
+Widzimy, że gęstości z symulacji pokrywają się z gęstościami beta. Potwierdzają to wysokie p-wartości testu.
+
+Niezależność zmiennych $Y_i$ można zweryfikować macierzą kowariancji.
+```{r}
+cov(t(plots_tests[[3]]))
+```
+
+
+## Dowód teoretyczny
+
+Potwierdzają to również rozważania teoretyczne. W pracy http://dornsife.usc.edu/assets/sites/406/docs/505b/polya.urn.pdf jest dowiedzione twierdzenie (2.5) które mówi, że rozkład graniczny wektora częstości występowania kolorów to rozkład Dirichleta. 
